@@ -14,7 +14,7 @@ mod tests {
     use lib::function_to_string;
 
     #[function_to_string]
-    fn this_is_test(param: &str) {
+    fn this_is_test(_param: &str) {
         /// Comment in this test
         println!("{}", OUTPUT);
     }
