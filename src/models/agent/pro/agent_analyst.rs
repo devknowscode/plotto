@@ -163,9 +163,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_init_agent_architect() {
-        let agent_architect = AgentAnalyst::new();
-        println!("{:#?}", agent_architect);
+    fn test_init_agent_analyst() {
+        let agent_analyst = AgentAnalyst::new();
+        println!("{:#?}", agent_analyst);
     }
 
     #[tokio::test]
@@ -196,12 +196,12 @@ mod tests {
             backend_code: None,
             api_endpoint_schema: None,
         };
-        let mut agent_architect = AgentAnalyst::new();
+        let mut agent_analyst = AgentAnalyst::new();
 
         match tasklist.project_scope {
             Some(ref project_scope) => {
                 if project_scope.is_external_urls_required {
-                    agent_architect
+                    agent_analyst
                         .determine_external_urls(
                             &mut tasklist,
                             "build a website that tracks forex and crypto prices",
@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_agent_architect() {
+    async fn test_execute_agent_analyst() {
         let mut tasklist: TaskList = TaskList {
             description: String::from("build a website that tracks forex and crypto prices"),
             project_scope: None,
