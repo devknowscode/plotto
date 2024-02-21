@@ -1,4 +1,7 @@
+use async_trait::async_trait;
 use serde::Deserialize;
+
+use crate::models::agent::basic::basic_agent::BasicAgent;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProjectScope {
@@ -23,4 +26,13 @@ pub struct TaskList {
     pub external_urls: Option<Vec<String>>,
     pub backend_code: Option<String>,
     pub api_endpoint_schema: Option<Vec<RouteObject>>,
+}
+
+#[async_trait]
+pub trait GeneralAgent {
+    // AgentManager will use to get attributes from agents
+    fn get_attributes(&self) -> &BasicAgent;
+
+    // This function will allow agents to execute their logic
+    async fn execute(&mut self, tasklist: &mut TaskList) -> Result<(), Box<dyn std::error::Error>>;
 }
