@@ -662,6 +662,7 @@ dependencies = [
  "features",
  "lib",
  "openai_dive",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
