@@ -3,6 +3,8 @@ use openai_dive::v1::{
     resources::chat::{ChatMessage, ChatMessageContent, Role},
 };
 
+use reqwest::Client;
+
 use crate::apis::call_request::call_gpt;
 
 use super::command_line::AgentCommand;
@@ -45,8 +47,15 @@ pub async fn ai_task_request(
     gpt_response
 }
 
+pub async fn check_status_code(client: &Client, url: &str) -> Result<u16, reqwest::Error> {
+    let response = client.get(url).send().await?;
+    Ok(response.status().as_u16())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::tasks::analyst::convert_user_input_to_goal;
 
     use super::*;
@@ -74,5 +83,24 @@ mod tests {
 
         println!("{}", plotto_response);
         println!("");
+    }
+
+    #[tokio::test]
+    async fn test_check_status_code() {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+
+        let status_code =
+            check_status_code(&client, "https://api.binance.com/api/v3/exchangeInfo").await;
+        match status_code {
+            Ok(code) => {
+                println!("{}", code);
+            }
+            Err(error) => {
+                println!("Error checking {}", error);
+            }
+        }
     }
 }
