@@ -3,8 +3,9 @@ use crate::{
         ai_task_request, read_code_template, read_exec_main_code, save_backend_code,
     },
     models::agent::basic::{basic_agent::BasicAgent, basic_trait::BasicTrait},
-    tasks::backend::{
-        print_backend_webserver_code, print_fixed_code, print_improved_webserver_code,
+    tasks::{
+        backend::{print_backend_webserver_code, print_fixed_code, print_improved_webserver_code},
+        tester::print_rest_api_endpoints,
     },
 };
 
@@ -96,6 +97,24 @@ impl AgentBackend {
 
         save_backend_code(&gpt_response);
         tasklist.backend_code = Some(gpt_response);
+    }
+
+    pub async fn extract_rest_api_endpoints(&mut self) -> String {
+        let backend_code: String = read_exec_main_code();
+
+        // Structure message context
+        let msg: String = format!("CODE INPUT: {}", backend_code);
+
+        let gpt_response = ai_task_request(
+            msg,
+            &self.attributes.position,
+            "Extract rest api endpoints to schemas",
+            print_rest_api_endpoints,
+        )
+        .await;
+        println!("DEBUG::{}", gpt_response);
+
+        gpt_response
     }
 }
 
