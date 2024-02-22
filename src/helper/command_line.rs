@@ -1,11 +1,14 @@
-use std::io::{stdin, stdout};
+use std::{
+    io::{stdin, stdout},
+    process::Command,
+};
 
 use crossterm::{
     style::{ResetColor, SetForegroundColor, Stylize},
     ExecutableCommand,
 };
 
-use crate::utils::command_color::CommandColor;
+use crate::{helper::general::EXEC_MAIN_PATH, utils::command_color::CommandColor};
 
 pub enum AgentCommand {
     Info,
@@ -33,6 +36,53 @@ impl AgentCommand {
 
         // Reset color
         stdout.execute(ResetColor).unwrap();
+    }
+}
+
+pub fn confirm_safe_code() -> bool {
+    let mut stdout = stdout();
+
+    loop {
+        // Open project generated
+        Command::new("code")
+            .arg(EXEC_MAIN_PATH)
+            .output()
+            .expect("Something went wrong to open source code generated!");
+
+        // Print title command
+        stdout
+            .execute(SetForegroundColor(CommandColor::Yellow.get_color()))
+            .unwrap();
+        println!("");
+        println!("----------------------------------------------------------");
+        println!("WARNING: You are about to run code written entirely by AI.");
+        println!("Please review your code and confirm to should be continue.");
+        println!("----------------------------------------------------------");
+
+        // Reset color
+        stdout.execute(ResetColor).unwrap();
+
+        // Print option to choose
+        println!("1. Everything is okay!");
+        println!("2. Stop here!");
+        println!("");
+
+        // Get user input
+        let mut user_input = String::new();
+        stdin()
+            .read_line(&mut user_input)
+            .expect("Failed to read user input!");
+
+        user_input = user_input.trim().to_string();
+
+        // Match response
+        match user_input.as_str() {
+            "1" => return true,
+            "2" => return false,
+            _ => {
+                println!("Invalid input. Please select '1' or '2'");
+            }
+        }
     }
 }
 
@@ -74,5 +124,10 @@ mod tests {
         println!("");
         issue_command.print_agent_message("Debugger", "Fix every bug in code");
         println!("");
+    }
+
+    #[test]
+    fn test_confirm_safe_code() {
+        confirm_safe_code();
     }
 }
