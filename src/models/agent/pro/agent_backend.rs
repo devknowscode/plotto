@@ -74,6 +74,29 @@ impl AgentBackend {
         save_backend_code(&gpt_response);
         tasklist.backend_code = Some(gpt_response);
     }
+
+    pub async fn fix_bug(&mut self, tasklist: &mut TaskList) {
+        let backend_code = read_exec_main_code();
+
+        let msg = format!(
+            "BROKEN CODE: {:?} \n ERROR BUGS: {:?} \n
+            THIS FUNCTION ONLY OUTPUTS CODE. JUST OUTPUT THE CODE.",
+            backend_code, self.bug_errors
+        );
+
+        let gpt_response = ai_task_request(
+            msg,
+            &self.attributes.position,
+            "Fix backend code",
+            print_fixed_code,
+        )
+        .await;
+
+        println!("DEBUG::{}", gpt_response);
+
+        save_backend_code(&gpt_response);
+        tasklist.backend_code = Some(gpt_response);
+    }
 }
 
 #[cfg(test)]
