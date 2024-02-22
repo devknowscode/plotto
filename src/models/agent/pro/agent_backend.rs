@@ -1,15 +1,31 @@
+use std::{
+    process::{Command, Stdio},
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use reqwest::Client;
+use tokio::time;
+
 use crate::{
-    helper::general::{
-        ai_task_request, read_code_template, read_exec_main_code, save_backend_code,
+    helper::{
+        command_line::{confirm_safe_code, AgentCommand},
+        general::{
+            ai_task_request, check_status_code, read_code_template, read_exec_main_code,
+            save_api_endpoint, save_backend_code, WEB_SERVER_PROJECT_PATH,
+        },
     },
-    models::agent::basic::{basic_agent::BasicAgent, basic_trait::BasicTrait},
+    models::agent::basic::{
+        basic_agent::{AgentState, BasicAgent},
+        basic_trait::BasicTrait,
+    },
     tasks::{
         backend::{print_backend_webserver_code, print_fixed_code, print_improved_webserver_code},
         tester::print_rest_api_endpoints,
     },
 };
 
-use super::pro_trait::TaskList;
+use super::pro_trait::{GeneralAgent, RouteObject, TaskList};
 
 #[derive(Debug)]
 pub struct AgentBackend {
@@ -118,6 +134,189 @@ impl AgentBackend {
     }
 }
 
+#[async_trait]
+impl GeneralAgent for AgentBackend {
+    fn get_attributes(&self) -> &BasicAgent {
+        &self.attributes
+    }
+
+    async fn execute(&mut self, tasklist: &mut TaskList) -> Result<(), Box<dyn std::error::Error>> {
+        while self.attributes.state != AgentState::Done {
+            match &self.attributes.state {
+                AgentState::Planning => {
+                    self.initial_backend_code(tasklist).await;
+                    self.attributes.state = AgentState::Working;
+                    continue;
+                }
+                AgentState::Working => {
+                    if self.bug_count > 0 {
+                        self.fix_bug(tasklist).await;
+                    } else {
+                        // self.improve_backend_code(tasklist).await;
+                    }
+                    self.attributes.state = AgentState::Testing;
+                    continue;
+                }
+                AgentState::Testing => {
+                    AgentCommand::Test.print_agent_message(
+                        &self.attributes.position,
+                        "Confirm code is safe from user...",
+                    );
+
+                    let is_continue = confirm_safe_code();
+
+                    if !is_continue {
+                        panic!("Better go work on some AI alignment instead...")
+                    }
+
+                    // Build and test code generated
+                    AgentCommand::Test.print_agent_message(
+                        self.attributes.position.as_str(),
+                        "Building project...",
+                    );
+
+                    // Build code generated
+                    // ???
+                    let build_backend_server = Command::new("cargo")
+                        .arg("build")
+                        .current_dir(WEB_SERVER_PROJECT_PATH)
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .output()
+                        .expect("Failed to build backend application");
+
+                    // Determine if build errors
+                    if !build_backend_server.status.success() {
+                        let error_arr = build_backend_server.stderr;
+                        let error_str = String::from_utf8(error_arr).unwrap();
+
+                        // Update error stat
+                        self.bug_count += 1;
+                        self.bug_errors = Some(error_str);
+
+                        // Exit if too many bugs
+                        if self.bug_count > 2 {
+                            AgentCommand::Issue.print_agent_message(
+                                &self.attributes.position,
+                                "Too many bugs found in code...",
+                            );
+                            panic!("Too many bugs!");
+                        }
+
+                        // Pass back to rework
+                        self.attributes.state = AgentState::Working;
+                        continue;
+                    }
+
+                    // Build success without errors
+                    self.bug_count = 0;
+                    AgentCommand::Test.print_agent_message(
+                        &self.attributes.position,
+                        "Server is built successful",
+                    );
+
+                    // Extract api endpoints
+                    let gpt_response = self.extract_rest_api_endpoints().await;
+
+                    // Convert api endpoints into values
+                    let api_endpoints: Vec<RouteObject> = serde_json::from_str(
+                        gpt_response.as_str(),
+                    )
+                    .expect("Failed to decode gpt response from serde_json (api_endpoints)");
+
+                    // Define "get" and not dynamic endpoints to check
+                    let check_endpoints: Vec<RouteObject> = api_endpoints
+                        .iter()
+                        .filter(|&route_object| {
+                            route_object.method == "get" && route_object.is_route_dynamic == "false"
+                        })
+                        .cloned()
+                        .collect();
+
+                    // Store api endpoints
+                    tasklist.api_endpoint_schema = Some(check_endpoints.clone());
+
+                    // Build backend application
+                    AgentCommand::Test
+                        .print_agent_message(&self.attributes.position, "Starting web server...");
+
+                    // Execute running server
+                    let mut run_backend_server = Command::new("cargo")
+                        .arg("run")
+                        .current_dir(WEB_SERVER_PROJECT_PATH)
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .spawn()
+                        .expect("Failed to run backend application");
+
+                    // Let user know testing on server will take place soon
+                    AgentCommand::Test.print_agent_message(
+                        &self.attributes.position,
+                        "Launching test endpoints in 5 seconds...",
+                    );
+                    time::sleep(Duration::from_secs(5)).await;
+
+                    // Check status code from test
+                    for endpoint in check_endpoints {
+                        // Print endpoint testing
+                        AgentCommand::Test.print_agent_message(
+                            self.attributes.position.as_str(),
+                            format!("Testing endpoint {}...", endpoint.route).as_str(),
+                        );
+
+                        // Create client request with timout 5s
+                        let client = Client::builder()
+                            .timeout(Duration::from_secs(5))
+                            .build()
+                            .unwrap();
+
+                        // Test endpoint
+                        let url = format!("localhost:8080/{}", endpoint.route);
+                        match check_status_code(&client, &url).await {
+                            Ok(status_code) => {
+                                if status_code != 200 {
+                                    AgentCommand::Issue.print_agent_message(
+                                        &self.attributes.position,
+                                        format!(
+                                            "WARNING: Failed to call web server with endpoint {}",
+                                            endpoint.route
+                                        )
+                                        .as_str(),
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                // Kill if got error
+                                run_backend_server
+                                    .kill()
+                                    .expect("Failed to kill web server testing.");
+                                let err_msg: String = format!("Error checking: {}", e);
+                                AgentCommand::Issue
+                                    .print_agent_message(&self.attributes.position, &err_msg);
+                            }
+                        }
+                    }
+                    save_api_endpoint(&gpt_response);
+
+                    AgentCommand::Test.print_agent_message(
+                        &self.attributes.position,
+                        "Backend testing complete...",
+                    );
+
+                    run_backend_server
+                        .kill()
+                        .expect("Failed to kill web server testing!");
+
+                    self.attributes.state = AgentState::Done;
+                }
+                _ => self.attributes.state = AgentState::Done,
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::models::agent::pro::pro_trait::ProjectScope;
@@ -175,5 +374,31 @@ mod tests {
 
         let mut agent_backend = AgentBackend::new();
         agent_backend.improve_backend_code(&mut tasklist).await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_agent_backend() {
+        let mut tasklist: TaskList = TaskList {
+            description: String::from("build a website that tracks forex and crypto prices"),
+            project_scope: Some(ProjectScope {
+                is_crud_required: true,
+                is_user_login_and_logout: true,
+                is_external_urls_required: true,
+            }),
+            external_urls: Some(vec![
+                String::from("https://api.exchangerate-api.com/v4/latest/USD"),
+                String::from(
+                    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+                ),
+            ]),
+            backend_code: None,
+            api_endpoint_schema: None,
+        };
+
+        let mut agent_backend = AgentBackend::new();
+        agent_backend
+            .execute(&mut tasklist)
+            .await
+            .expect("Failed to execute backend developer!");
     }
 }
