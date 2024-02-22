@@ -36,7 +36,7 @@ pub fn extend_message_to_agent(func: fn(&str) -> &'static str, input: &str) -> C
 }
 
 pub async fn ai_task_request(
-    msg: &str,
+    msg: String,
     agent_position: &str,
     agent_task: &str,
     func: fn(&str) -> &'static str,
@@ -45,7 +45,7 @@ pub async fn ai_task_request(
     AgentCommand::Info.print_agent_message(agent_position, agent_task);
 
     // Extend message to get true chat completion
-    let extend_message = extend_message_to_agent(func, msg);
+    let extend_message = extend_message_to_agent(func, msg.as_str());
 
     // Get agent response
     let gpt_response = call_gpt(vec![extend_message]).await;
@@ -104,7 +104,7 @@ mod tests {
     async fn test_ai_task_request() {
         println!("");
         let plotto_response = ai_task_request(
-            "Make a website to manage task list",
+            String::from("Make a website to manage task list"),
             "Analyst",
             "Convert user input to goal",
             convert_user_input_to_goal,

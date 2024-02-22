@@ -34,7 +34,7 @@ impl AgentAnalyst {
 
     // Define project scope base on print_project_scope task in prompt
     pub async fn define_project_scope(&mut self, tasklist: &mut TaskList) -> ProjectScope {
-        let msg = tasklist.description.as_str();
+        let msg = format!("{}", tasklist.description);
         let gpt_response = ai_task_request(
             msg,
             &self.attributes.position,
@@ -54,7 +54,7 @@ impl AgentAnalyst {
     }
 
     // Determine external urls base on print_site_urls task in prompt
-    pub async fn determine_external_urls(&mut self, tasklist: &mut TaskList, msg: &str) {
+    pub async fn determine_external_urls(&mut self, tasklist: &mut TaskList, msg: String) {
         let gpt_response = ai_task_request(
             msg,
             &self.attributes.position,
@@ -87,11 +87,8 @@ impl GeneralAgent for AgentAnalyst {
 
                     // Check project scope has external urls
                     if project_scope.is_external_urls_required {
-                        self.determine_external_urls(
-                            tasklist,
-                            tasklist.description.clone().as_str(),
-                        )
-                        .await;
+                        self.determine_external_urls(tasklist, tasklist.description.clone())
+                            .await;
                         self.attributes.state = AgentState::Testing;
                     }
                 }
@@ -204,7 +201,7 @@ mod tests {
                     agent_analyst
                         .determine_external_urls(
                             &mut tasklist,
-                            "build a website that tracks forex and crypto prices",
+                            String::from("build a website that tracks forex and crypto prices"),
                         )
                         .await;
                     assert!(true)
