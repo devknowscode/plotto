@@ -13,7 +13,7 @@ pub const CODE_TEMPLATE_PATH: &str =
 pub const EXEC_MAIN_PATH: &str = "/Users/phat/Desktop/Codespaces/rustc/web_template/src/main.rs";
 pub const WEB_SERVER_PROJECT_PATH: &str = "/Users/phat/Desktop/Codespaces/rustc/web_template";
 pub const API_SCHEMA_PATH: &str =
-    "/Users/phat/Desktop/Codespaces/rustc/plotto/schemas/api_schema.json";
+    "/Users/phat/Desktop/Codespaces/temp/plotto/schemas/api_schema.json";
 
 pub fn extend_message_to_agent(func: fn(&str) -> &'static str, input: &str) -> ChatMessage {
     let task = func(input);
